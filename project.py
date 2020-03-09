@@ -45,6 +45,14 @@ while capL.isOpened() or capR.isOpened():
         cv2.imshow("grayframe1", img1)
 
         distance = np.array(np.sqrt(np.sum((des1[:, np.newaxis, :] - des2[np.newaxis, :, :]) ** 2, axis=-1))) #SIFT descriptor of a point is just 128-dimensional vector, so you can simple compute Euclidean distance between every two and match nearest pairs.
+
+        for k in range(len(kp1)):
+            for z in range(len(kp2)):
+                if kp1[k].angle - kp2[z].angle > 0.5 or kp1[k].angle - kp2[z].angle < -0.5:
+                    distance[k, z] = 100000000000
+                if kp1[k].pt[1] - kp2[z].pt[1] > 3 or kp1[k].pt[1] - kp2[z].pt[1] < -3:
+                    distance[k, z] = 100000000000
+
         ind = np.unravel_index(np.argmin(distance, axis=None), distance.shape)
         print(distance.min())
         kpL = kp2[ind[1]]
