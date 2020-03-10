@@ -8,7 +8,7 @@ capL = cv2.VideoCapture('robotL.avi')
 capR = cv2.VideoCapture('robotR.avi')
 focal_lenght = 567.2  # in pixel
 baseline = 92.226  # in mm
-dim = 50
+dim = 100
 
 if not capL.isOpened():
     print("Error opening video stream or file")
@@ -31,27 +31,31 @@ while capL.isOpened() or capR.isOpened():
 
 
         gray = cv2.cvtColor(centerL, cv2.COLOR_BGR2GRAY)
+        final = cv2.medianBlur(gray, 5)
+
         sift = cv2.xfeatures2d.SIFT_create()
-        kp2, des2 = sift.detectAndCompute(gray, None)
+        kp2, des2 = sift.detectAndCompute(final, None)
     # draw key points detected
-        img2 = cv2.drawKeypoints(gray, kp2, gray, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+        img2 = cv2.drawKeypoints(final, kp2, final, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
         cv2.imshow("grayframe", img2)
 
         gray1 = cv2.cvtColor(centerR, cv2.COLOR_BGR2GRAY)
+        final1 = cv2.medianBlur(gray1, 5)
+
         sift = cv2.xfeatures2d.SIFT_create()
-        kp1, des1 = sift.detectAndCompute(gray1, None)
+        kp1, des1 = sift.detectAndCompute(final1, None)
         # draw key points detected
-        img1 = cv2.drawKeypoints(gray1, kp1, gray1, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+        img1 = cv2.drawKeypoints(final1, kp1, final1, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
         cv2.imshow("grayframe1", img1)
 
         distance = np.array(np.sqrt(np.sum((des1[:, np.newaxis, :] - des2[np.newaxis, :, :]) ** 2, axis=-1))) #SIFT descriptor of a point is just 128-dimensional vector, so you can simple compute Euclidean distance between every two and match nearest pairs.
 
-        for k in range(len(kp1)):
-            for z in range(len(kp2)):
-                if kp1[k].angle - kp2[z].angle > 0.5 or kp1[k].angle - kp2[z].angle < -0.5:
-                    distance[k, z] = 100000000000
-                if kp1[k].pt[1] - kp2[z].pt[1] > 3 or kp1[k].pt[1] - kp2[z].pt[1] < -3:
-                    distance[k, z] = 100000000000
+        # for k in range(len(kp1)):
+        #     for z in range(len(kp2)):
+        #         if kp1[k].angle - kp2[z].angle > 0.5 or kp1[k].angle - kp2[z].angle < -0.5:
+        #             distance[k, z] = 100000000000
+        #         if kp1[k].pt[1] - kp2[z].pt[1] > 3 or kp1[k].pt[1] - kp2[z].pt[1] < -3:
+        #             distance[k, z] = 100000000000
 
         ind = np.unravel_index(np.argmin(distance, axis=None), distance.shape)
         print(distance.min())
