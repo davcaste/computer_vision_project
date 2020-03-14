@@ -16,36 +16,38 @@ if not capL.isOpened():
 if not capR.isOpened():
     print("Error opening video stream or file")
 
-while capL.isOpened() or capR.isOpened():
-    retL, frame = capL.read()
-    retR, frame1 = capR.read()
+while capL.isOpened() and capR.isOpened():
+    retL, frameL = capL.read()
+    retR, frameR = capR.read()
 
     if retL is True and retR is True:
         # Capture frame-by-frame
         # Display the resulting frame
-        cv2.rectangle(frame, (int(frame.shape[1]/2)-dim, int(frame.shape[0]/2)-dim), (int(frame.shape[1]/2)+dim, int(frame.shape[0]/2)+dim), 250, 1)
-        cv2.rectangle(frame1, (int(frame1.shape[1]/2)-dim, int(frame1.shape[0]/2)-dim), (int(frame1.shape[1]/2)+dim, int(frame1.shape[0]/2)+dim), 250, 1)
-        centerL = frame[int(frame.shape[0]/2)-dim: int(frame.shape[0]/2)+dim, int(frame.shape[1]/2)-dim:int(frame.shape[1]/2)+dim]
-        centerR = frame1[int(frame1.shape[0] / 2) - dim: int(frame1.shape[0] / 2) + dim,
-                  int(frame1.shape[1] / 2) - dim:int(frame1.shape[1] / 2) + dim]
+        cv2.rectangle(frameL, (int(frameL.shape[1]/2)-dim, int(frameL.shape[0]/2)-dim), (int(frameL.shape[1]/2)+dim, int(frameL.shape[0]/2)+dim), 250, 1)
+        cv2.rectangle(frameR, (int(frameR.shape[1]/2)-dim, int(frameR.shape[0]/2)-dim), (int(frameR.shape[1]/2)+dim, int(frameR.shape[0]/2)+dim), 250, 1)
+        centerL = frameL[int(frameL.shape[0]/2)-dim: int(frameL.shape[0]/2)+dim, int(frameL.shape[1]/2)-dim:int(frameL.shape[1]/2)+dim]
+        centerR = frameR[int(frameR.shape[0] / 2) - dim: int(frameR.shape[0] / 2) + dim, int(frameR.shape[1] / 2) - dim:int(frameR.shape[1] / 2) + dim]
 
-
-        gray = cv2.cvtColor(centerL, cv2.COLOR_BGR2GRAY)
-        final = cv2.medianBlur(gray, 5)
+        grayL = cv2.cvtColor(centerL, cv2.COLOR_BGR2GRAY)
+        intermediateL = cv2.equalizeHist(grayL)
+        finalL = cv2.medianBlur(intermediateL, 5)
 
         sift = cv2.xfeatures2d.SIFT_create()
-        kp2, des2 = sift.detectAndCompute(final, None)
+        kp2, des2 = sift.detectAndCompute(finalL, None)
     # draw key points detected
-        img2 = cv2.drawKeypoints(final, kp2, final, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+        img2 = cv2.drawKeypoints(finalL, kp2, finalL, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
         cv2.imshow("grayframe", img2)
 
-        gray1 = cv2.cvtColor(centerR, cv2.COLOR_BGR2GRAY)
-        final1 = cv2.medianBlur(gray1, 5)
+        grayR = cv2.cvtColor(centerR, cv2.COLOR_BGR2GRAY)
+        intermediateR = cv2.equalizeHist(grayR)
+        finalR = cv2.medianBlur(intermediateR, 5)
 
         sift = cv2.xfeatures2d.SIFT_create()
-        kp1, des1 = sift.detectAndCompute(final1, None)
+        kp1, des1 = sift.detectAndCompute(finalR, None)
+
+
         # draw key points detected
-        img1 = cv2.drawKeypoints(final1, kp1, final1, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+        img1 = cv2.drawKeypoints(finalR, kp1, finalR, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
         cv2.imshow("grayframe1", img1)
 
         distance = np.array(np.sqrt(np.sum((des1[:, np.newaxis, :] - des2[np.newaxis, :, :]) ** 2, axis=-1))) #SIFT descriptor of a point is just 128-dimensional vector, so you can simple compute Euclidean distance between every two and match nearest pairs.
@@ -79,8 +81,8 @@ while capL.isOpened() or capR.isOpened():
         #
         # plt.imshow(img3), plt.show()
 
-        cv2.imshow('FrameL', frame)
-        cv2.imshow('FrameR', frame1)
+        cv2.imshow('FrameL', frameL)
+        cv2.imshow('FrameR', frameR)
     # Press Q on keyboard to  exit
     if cv2.waitKey(25) & 0xFF == ord('q'):
         break
@@ -124,5 +126,4 @@ print('ciao')
 # print(des1)
 # print('ciao')
 # print(des2)
-
 
