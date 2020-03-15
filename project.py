@@ -9,7 +9,7 @@ capR = cv2.VideoCapture('robotR.avi')
 focal_lenght = 567.2  # in pixel
 baseline = 92.226  # in mm
 dim = 100
-
+h_stripe = 10
 if not capL.isOpened():
     print("Error opening video stream or file")
 
@@ -27,12 +27,37 @@ while capL.isOpened() and capR.isOpened():
         cv2.rectangle(frameR, (int(frameR.shape[1]/2)-dim, int(frameR.shape[0]/2)-dim), (int(frameR.shape[1]/2)+dim, int(frameR.shape[0]/2)+dim), 250, 1)
         centerL = frameL[int(frameL.shape[0]/2)-dim: int(frameL.shape[0]/2)+dim, int(frameL.shape[1]/2)-dim:int(frameL.shape[1]/2)+dim]
         centerR = frameR[int(frameR.shape[0] / 2) - dim: int(frameR.shape[0] / 2) + dim, int(frameR.shape[1] / 2) - dim:int(frameR.shape[1] / 2) + dim]
+        centerprova = frameL[int(frameL.shape[0] / 2) - dim: int(frameL.shape[0] / 2) + dim,
+                  int(frameL.shape[1] / 2) - dim:int(frameL.shape[1] / 2) + dim]
 
         grayL = cv2.cvtColor(centerL, cv2.COLOR_BGR2GRAY)
         intermediateL = cv2.equalizeHist(grayL)
         finalL = cv2.medianBlur(intermediateL, 5)
-
+        image_stripes = np.zeros((int(finalL.shape[1]/h_stripe),h_stripe, finalL.shape[0]), dtype='uint8')
+        kp = np.zeros((int(finalL.shape[1]/h_stripe)), dtype='object')
+        des = np.zeros(int(finalL.shape[1]/h_stripe), dtype='object')
+        img = np.zeros((int(finalL.shape[1]/h_stripe),h_stripe, finalL.shape[0]), dtype='uint8')
         sift = cv2.xfeatures2d.SIFT_create()
+
+        for i in range(int(finalL.shape[1]/h_stripe)):
+            image_stripes[i] = finalL[i*h_stripe:(i+1)*h_stripe, :]
+            kp[i], des[i] = sift.detectAndCompute(image_stripes[i], None)
+            print(img.shape)
+            print(image_stripes.shape)
+            print(kp.shape)
+            centerprova[i*h_stripe:(i+1)*h_stripe,:,:] = cv2.drawKeypoints(image_stripes[i], kp[i], image_stripes[i], flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+
+        totalimage = np.vstack([centerprova[i*h_stripe:(i+1)*h_stripe,:,:] for i in range(int(finalL.shape[1]/h_stripe))])
+        kpt = np.empty((sum([len([kp[i] for i in range(int(finalL.shape[1]/h_stripe))])])), dtype='object')
+        dest = []
+        kpt = np.concatenate([kp[i] for i in range(int(finalL.shape[1]/h_stripe))]).ravel()
+        dest.append([des[i] for i in range(int(finalL.shape[1]/h_stripe))])
+        cv2.imshow('image_stripes', totalimage)
+        cv2.imshow('stripe', image_stripes[3])
+        img = cv2.drawKeypoints(totalimage, kpt[:], totalimage, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+        cv2.imshow("sk", img)
+
+
         kp2, des2 = sift.detectAndCompute(finalL, None)
     # draw key points detected
         img2 = cv2.drawKeypoints(finalL, kp2, finalL, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
@@ -43,6 +68,7 @@ while capL.isOpened() and capR.isOpened():
         finalR = cv2.medianBlur(intermediateR, 5)
 
         sift = cv2.xfeatures2d.SIFT_create()
+
         kp1, des1 = sift.detectAndCompute(finalR, None)
 
         # # BFMatcher with default params
@@ -58,6 +84,7 @@ while capL.isOpened() and capR.isOpened():
         # draw key points detected
         img1 = cv2.drawKeypoints(finalR, kp1, finalR, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
         cv2.imshow("grayframe1", img1)
+        # distance = np.zeros((des1.shape[0], des2.shape[0]))
         # for i in range(des1.shape[0]-1):
         #     for j in range(des2.shape[0]-1):
         #         if kp1[i].pt[1] - kp2[j].pt[1] < 0.3 or kp1[i].pt[1] - kp2[j].pt[1] > -0.3:
@@ -75,7 +102,7 @@ while capL.isOpened() and capR.isOpened():
         ind = np.unravel_index(np.argmin(distance, axis=None), distance.shape)
         print(distance.min())
         #ciccio = np.unravel_index(distance<100
-        ind = tuple(zip(*np.where(distance<50)))
+        ind = tuple(zip(*np.where(distance < 50)))
         kpL = []
         kpR = []
         for i in ind:
@@ -83,9 +110,9 @@ while capL.isOpened() and capR.isOpened():
                 kpL.append(kp2[i[1]])
                 kpR.append(kp1[i[0]])
         for i,j in enumerate(kpL):
-            cv2.circle(centerL, (int(j.pt[0]), int(j.pt[1])), 4, (10*i, 0, 0), 1)
+            cv2.circle(centerL, (int(j.pt[0]), int(j.pt[1])), 4, (10*i, 3*i,25*i), 1)
         for i, j in enumerate(kpR):
-            cv2.circle(centerR, (int(j.pt[0]), int(j.pt[1])), 4, (10*i, 0, 0), 1)
+            cv2.circle(centerR, (int(j.pt[0]), int(j.pt[1])), 4, (10*i, 3*i,25*i), 1)
         cv2.imshow('centerL', centerL)
 
         cv2.imshow('centerR', centerR)
