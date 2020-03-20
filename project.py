@@ -175,24 +175,37 @@ while capL.isOpened() and capR.isOpened():
 
         print(len(des_stripesL))
         des_stripesL = np.array(des_stripesL)
-        des_stripesR = np.array((des_stripesL))
-
+        kp_stripesL = np.array(kp_stripesL)
+        des_stripesR = np.array(des_stripesR)
+        kp_stripesR = np.array(kp_stripesR)
+        distance = []
+        # distance = np.zeros((int(finalR.shape[1] / h_stripe),), dtype='object')
+        # distance[i, :, :] = np.array(np.sqrt(np.sum((des_stripesL[i][:, np.newaxis, :] - des_stripesR[i][np.newaxis, :, :]) ** 2, axis=-1)))
+        # distance = np.array(np.sqrt(np.sum((des1[:, np.newaxis, :] - des2[np.newaxis, :, :]) ** 2, axis=-1)))
         for j in range(len(des_stripesL)):
             des_stripesL[j] = np.array(des_stripesL[j])
+            kp_stripesL[j] =np.array(kp_stripesL[j])
             des_stripesR[j] = np.array(des_stripesR[j])
-            temp_match = flann.knnMatch(des_stripesL[j], des_stripesR[j], k=2)
+            kp_stripesR[j] = np.array(kp_stripesR[j])
+            distance.append([])
+            distance[j] = np.array(np.sqrt(np.sum((des_stripesL[j][:, np.newaxis, :] - des_stripesR[j][np.newaxis, :, :]) ** 2, axis=-1)))
+            ind = tuple(zip(*np.where(distance[j] < 100)))
+            for i in ind:
+                cv2.circle(finalL, (int(kp_stripesL[j, i[0]].pt[0]), int(kp_stripesL[j, i[0]].pt[1])), 4, (10 * i, 0, 0), 1)
+                cv2.circle(finalR, (int(kp_stripesR[j, i[1]].pt[0]), int(kp_stripesR[j, i[1]].pt[1])), 4, (10 * i, 0, 0), 1)
+            #temp_match = flann.knnMatch(des_stripesL[j], des_stripesR[j], k=2)
            # matches.append(temp_match)
             # ratio test as per Lowe's paper
-            for i, (m, n) in enumerate(temp_match):
-                if m.distance < 0.8 * n.distance:
-                    good.append(m)
+            # for i, (m, n) in enumerate(temp_match):
+            #     if m.distance < 0.8 * n.distance:
+            #         good.append(m)
         outimg = np.concatenate((finalL, finalR), axis=1)
-        for i in range(int(min(des_stripesL.__len__(), des_stripesR.__len__()))):
-            try:
-                cv2.drawMatchesKnn(finalL, kp_stripesL[i], finalR, kp_stripesR[i], good[i], outimg)
-                cv2.knn
-            except(SystemError):
-                continue
+        # for i in range(int(min(des_stripesL.__len__(), des_stripesR.__len__()))):
+        #     try:
+        #         cv2.drawMatchesKnn(finalL, kp_stripesL[i], finalR, kp_stripesR[i], good[i], outimg)
+        #         cv2.knn
+        #     except(SystemError):
+        #         continue
         kpL = kp_stripesL[4]
         kpR = kp_stripesR[4]
         cv2.imshow("outimg", outimg)
