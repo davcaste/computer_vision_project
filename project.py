@@ -9,7 +9,14 @@ capR = cv2.VideoCapture('robotR.avi')
 focal_lenght = 567.2  # in pixel
 baseline = 92.226  # in mm
 dim = 50
-h_stripe = 10
+h_stripe = 5
+max_kp = []
+d4 = 3
+d3 = 3
+d2 = 3
+d1 = 3
+d0 = 3
+temp_dim = 50
 if not capL.isOpened():
     print("Error opening video stream or file")
 
@@ -18,6 +25,7 @@ if not capR.isOpened():
 sift = cv2.xfeatures2d.SIFT_create()
 
 while capL.isOpened() and capR.isOpened():
+
     retL, frameL = capL.read()
     retR, frameR = capR.read()
 
@@ -35,11 +43,35 @@ while capL.isOpened() and capR.isOpened():
 
         grayL = cv2.cvtColor(centerL, cv2.COLOR_BGR2GRAY)
         intermediateL = cv2.equalizeHist(grayL)
-        finalL = cv2.medianBlur(intermediateL, 3)
+        finalL = cv2.medianBlur(intermediateL, 5)
+        # cv2.bilateralFilter(grayL, 5, 3, 3)
+        # cv2.equalizeHist(intermediateL)
+        # intermediateL
+        # cv2.medianBlur(intermediateL, 5)
+        # cv2.GaussianBlur(intermediateL, (3, 3), 3)
 
         grayR = cv2.cvtColor(centerR, cv2.COLOR_BGR2GRAY)
         intermediateR = cv2.equalizeHist(grayR)
-        finalR = cv2.medianBlur(intermediateR, 3)
+        finalR = cv2.medianBlur(intermediateR, 5)
+        # cv2.bilateralFilter(grayR, 5, 3, 3)
+        # cv2.equalizeHist(intermediateR)
+        # intermediateR
+        # cv2.medianBlur(intermediateR, 5)
+
+        info_frame = np.empty_like(finalL)
+
+        # L = frameL.shape[0]
+        # H = frameL.shape[1]
+        #
+        # l = finalL.shape[0]
+        # h = finalL.shape[1]
+        #
+        # off_x_L = (L/2 + l/2)
+        # # int(L/2)
+        # off_y_L = (H/2 - h)
+        # # int(H/2)
+        # off_x_R = off_x_L + frameL.shape[0]
+        # off_y_R = off_y_L
 
         # #     STATE OF ART FOUND OF CV2
         # stereo = cv2.StereoBM_create(numDisparities=16, blockSize=15)
@@ -124,11 +156,12 @@ while capL.isOpened() and capR.isOpened():
         kp1, des1 = sift.detectAndCompute(finalR, None)
 
         # draw key points detected
-        img2 = cv2.drawKeypoints(finalL, kp2, finalL, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
-        cv2.line(img2, (0, h_stripe), (img2.shape[1], h_stripe), (255,0,0))
-        cv2.imshow("grayframeL", img2)
-        img1 = cv2.drawKeypoints(finalR, kp1, finalR, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
-        cv2.imshow("grayframeR", img1)
+        # img2 = cv2.drawKeypoints(finalL, kp2, finalL, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+        # cv2.line(img2, (0, h_stripe), (img2.shape[1], h_stripe), (255,0,0))
+        # cv2.imshow("grayframeL", img2)
+        # img1 = cv2.drawKeypoints(finalR, kp1, finalR, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+        # cv2.imshow("grayframeR", img1)
+
         image_stripesL = np.zeros((int(finalL.shape[1] / h_stripe), h_stripe, finalL.shape[0]),
                                   dtype='uint8')  # NxHxL where N = n of stripes, H = height of stripes, L = lenght of window
         image_stripesR = np.zeros((int(finalR.shape[1] / h_stripe), h_stripe, finalR.shape[0]), dtype='uint8')
@@ -137,15 +170,15 @@ while capL.isOpened() and capR.isOpened():
         des_stripesL = []
         des_stripesR = []
         # FLANN parameters
-        FLANN_INDEX_KDTREE = 0
-        index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
-        search_params = dict(checks=50)
-        matches = np.zeros((int(finalL.shape[1] / h_stripe)), dtype='object')
-        good = []
-        ptsL = []
-        ptsR = []
-
-        flann = cv2.FlannBasedMatcher(index_params, search_params)
+        # FLANN_INDEX_KDTREE = 0
+        # index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
+        # search_params = dict(checks=50)
+        # matches = np.zeros((int(finalL.shape[1] / h_stripe)), dtype='object')
+        # good = []
+        # ptsL = []
+        # ptsR = []
+        #
+        # flann = cv2.FlannBasedMatcher(index_params, search_params)
         # for i in range(int(finalL.shape[1] / h_stripe)):
         #     if kp_stripesL[i] == 0:
         #         kp_stripesL[i] = []
@@ -173,42 +206,84 @@ while capL.isOpened() and capR.isOpened():
                     kp_stripesR[i].append(kp1[j])
                     des_stripesR[i].append(des1[j])
 
-        print(len(des_stripesL))
+        # print(len(des_stripesL))
         des_stripesL = np.array(des_stripesL)
         kp_stripesL = np.array(kp_stripesL)
         des_stripesR = np.array(des_stripesR)
         kp_stripesR = np.array(kp_stripesR)
         distance = []
+        disparity_map = []
+        kp_struct = []
         # distance = np.zeros((int(finalR.shape[1] / h_stripe),), dtype='object')
         # distance[i, :, :] = np.array(np.sqrt(np.sum((des_stripesL[i][:, np.newaxis, :] - des_stripesR[i][np.newaxis, :, :]) ** 2, axis=-1)))
         # distance = np.array(np.sqrt(np.sum((des1[:, np.newaxis, :] - des2[np.newaxis, :, :]) ** 2, axis=-1)))
         for j in range(len(des_stripesL)):
             des_stripesL[j] = np.array(des_stripesL[j])
-            kp_stripesL[j] =np.array(kp_stripesL[j])
+            kp_stripesL[j] = np.array(kp_stripesL[j])
             des_stripesR[j] = np.array(des_stripesR[j])
             kp_stripesR[j] = np.array(kp_stripesR[j])
             distance.append([])
-            distance[j] = np.array(np.sqrt(np.sum((des_stripesL[j][:, np.newaxis, :] - des_stripesR[j][np.newaxis, :, :]) ** 2, axis=-1)))
-            ind = tuple(zip(*np.where(distance[j] < 100)))
-            for i in ind:
-                cv2.circle(finalL, (int(kp_stripesL[j, i[0]].pt[0]), int(kp_stripesL[j, i[0]].pt[1])), 4, (10 * i, 0, 0), 1)
-                cv2.circle(finalR, (int(kp_stripesR[j, i[1]].pt[0]), int(kp_stripesR[j, i[1]].pt[1])), 4, (10 * i, 0, 0), 1)
+            # print(kp_stripesL[j].__len__(), " ", kp_stripesR[j].__len__())
+            if kp_stripesL[j].__len__() > 0 and kp_stripesR[j].__len__() > 0:
+                distance[j] = np.array(np.sqrt(np.sum((des_stripesL[j][:, np.newaxis, :] - des_stripesR[j][np.newaxis, :, :]) ** 2, axis=-1)))
+
+                ind = tuple(zip(*np.where(distance[j] < 100)))
+
+                for i in ind:
+                    uL = int(kp_stripesL[j][i[0]].pt[0])
+                    uR = int(kp_stripesR[j][i[1]].pt[0])
+                    vL = int(kp_stripesL[j][i[0]].pt[1])
+                    vR = int(kp_stripesR[j][i[1]].pt[1])
+                    disparity = uL - uR
+                    # print("(", uL, ", ",  vL, ") ", "(", uR, ", ",  vR, ") ", disparity)
+                    kp_struct.append(((uL, vL), (uR, vR)))
+                    disparity_map.append(disparity)
+                    cv2.circle(finalL, (uL, vL), 3, (255, 0, 0), 1)
+                    cv2.circle(finalR, (uR, vR), 3, (255, 0, 0), 1)
+
+            #     cv2.circle(finalL, (int(kp_stripesL[j, i[0]].pt[0]), int(kp_stripesL[j, i[0]].pt[1])), 4, (10 * i, 0, 0), 1)
+            #     cv2.circle(finalR, (int(kp_stripesR[j, i[1]].pt[0]), int(kp_stripesR[j, i[1]].pt[1])), 4, (10 * i, 0, 0), 1)
             #temp_match = flann.knnMatch(des_stripesL[j], des_stripesR[j], k=2)
            # matches.append(temp_match)
             # ratio test as per Lowe's paper
             # for i, (m, n) in enumerate(temp_match):
             #     if m.distance < 0.8 * n.distance:
             #         good.append(m)
+
         outimg = np.concatenate((finalL, finalR), axis=1)
+
+        if disparity_map != []:
+            d_main = np.mean(disparity_map)
+        # cv2.putText(outimg, d_main, (10, 10), cv2.FONT_ITALIC, 2, 255)
+        if 128 > d_main >= 0:
+            dist = round(0.001*focal_lenght * baseline / d_main, 2)
+            print("d_main: ", round(d_main, 2), 'distance: ', dist, "m")
+        for m in range(len(kp_struct)):
+            cv2.line(outimg, kp_struct[m][0], (kp_struct[m][1][0] + finalL.shape[0], kp_struct[m][1][1]), (255, 0, 0), 1)
+
         # for i in range(int(min(des_stripesL.__len__(), des_stripesR.__len__()))):
         #     try:
         #         cv2.drawMatchesKnn(finalL, kp_stripesL[i], finalR, kp_stripesR[i], good[i], outimg)
         #         cv2.knn
         #     except(SystemError):
         #         continue
-        kpL = kp_stripesL[4]
-        kpR = kp_stripesR[4]
+        # kpL = kp_stripesL[4]
+        # kpR = kp_stripesR[4]
+        # outimg = cv2.resize(outimg, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
         cv2.imshow("outimg", outimg)
+        n_kp = np.sum(len(kp_struct[:]))
+        max_kp.append(n_kp)
+
+        d4 = d3
+        d3 = d2
+        d2 = d1
+        d1 = d0
+        d0 = temp_dim
+        dist_vect = [d0, d1, d2, d3, d4]
+        if dist <= 3:
+            temp_dim = 118.182 - (50/2.2)*dist
+        dim = int(np.mean(dist_vect))
+        # print("n_kp: ", n_kp)
         # good = []
         # pts1 = []
         # pts2 = []
@@ -325,6 +400,7 @@ cv2.destroyAllWindows()
 # # ci = distance[col_index, np.arange(len(col_index))]
 # # print(ri)
 print('ciao')
+print("max: ", max(max_kp))
 # print(ci)
 # print(distance[row_index,col_index])
 # print(des1)
