@@ -261,7 +261,7 @@ while capL.isOpened() and capR.isOpened():
             if kp_stripesL[j].__len__() > 0 and kp_stripesR[j].__len__() > 0:
                 distance[j] = np.array(np.sqrt(np.sum((des_stripesL[j][:, np.newaxis, :] - des_stripesR[j][np.newaxis, :, :]) ** 2, axis=-1)))
 
-                ind = tuple(zip(*np.where(distance[j] < 200)))       ### GUARDA QUI!!!!!!!!!!!!!!!
+                ind = tuple(zip(*np.where(distance[j] < 150)))       ### GUARDA QUI!!!!!!!!!!!!!!!
                 index = list(ind)
                 # print(ind)
                 # print(index)
@@ -329,7 +329,8 @@ while capL.isOpened() and capR.isOpened():
             disparity_map_star = disparity_map[disparity_map_star.mask]
             std_dev = np.std(disparity_map_star)
             print(std_dev)
-            if std_dev > 1:
+            print(2/dist_ob)
+            if std_dev > (2/dist_ob):
                 val = filters.threshold_otsu(disparity_map_star)
                 # print(val)
                 d_main_background = np.mean(disparity_map_star[disparity_map_star <= val])
@@ -337,7 +338,7 @@ while capL.isOpened() and capR.isOpened():
                 print("d_main_background: ", round(d_main_background, 2), 'distance_background: ', dist_bg, "m")
                 d_main_object = np.mean(disparity_map_star[disparity_map_star > val])
                 dist_ob = round(0.001 * focal_lenght * baseline / d_main_object, 2)
-                print("d_main_object: ", round(d_main_object, 2), 'distance_background: ', dist_ob, "m")
+                print("d_main_object: ", round(d_main_object, 2), 'distance_object: ', dist_ob, "m")
             else:
                 d_main_object = np.mean(disparity_map_star)
                 dist_ob = round(0.001 * focal_lenght * baseline / d_main_object, 2)
