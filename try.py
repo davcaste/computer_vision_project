@@ -1,9 +1,7 @@
 import numpy as np
 import cv2
 from skimage import filters
-import matplotlib.patches as patches
-import matplotlib.pyplot as plt
-import copy
+from scipy.signal import kaiserord, lfilter, firwin, freqz
 
 capL = cv2.VideoCapture('robotL.avi')
 capR = cv2.VideoCapture('robotR.avi')
@@ -18,19 +16,46 @@ max_kp = []
 # d1 = 2
 # d0 = 2
 dist = 3
-dist_vect = np.ones((5,),dtype='int')*dim_kp
+dist_filter = [dist]
+dist_vect = np.ones((5,), dtype='int')*dim_kp
 d_main = ((baseline*focal_lenght)/dist)*0.001
 d_main_object = d_main
 d_main_foreground = d_main
 dist_ob = dist
 dist_fg = dist
-print(d_main)
 temp_dim = dim_kp
 flag = False
-n_square = 4
-m_square = 4
 min_disp = 0
 max_disp = 64
+
+#------------------------------------------------
+# Create a FIR filter and apply it to x.
+#------------------------------------------------
+sample_rate = 15
+
+# The Nyquist rate of the signal.
+nyq_rate = sample_rate / 2.0
+
+vel = 0.45  # m/s
+# The desired width of the transition from pass to stop,
+# relative to the Nyquist rate.  We'll design the filter
+# with a 5 Hz transition width.
+width = 5.0/nyq_rate
+
+# The desired attenuation in the stop band, in dB.
+ripple_db = 60.0
+
+# Compute the order and Kaiser parameter for the FIR filter.
+N, beta = kaiserord(ripple_db, width)
+# The cutoff frequency of the filter.
+cutoff_hz = 0.10
+
+# Use firwin with a Kaiser window to create a lowpass FIR filter.
+taps = firwin(N, cutoff_hz/nyq_rate, window=('kaiser', beta))
+
+# Use lfilter to filter x with the FIR filter.
+filtered_ob = lfilter(taps, 1.0, dist_vect)
+
 
 if not capL.isOpened():
     print("Error opening video stream or file")
@@ -251,6 +276,7 @@ while capL.isOpened() and capR.isOpened():
         # distance = np.zeros((int(finalR.shape[1] / h_stripe),), dtype='object')
         # distance[i, :, :] = np.array(np.sqrt(np.sum((des_stripesL[i][:, np.newaxis, :] - des_stripesR[i][np.newaxis, :, :]) ** 2, axis=-1)))
         # distance = np.array(np.sqrt(np.sum((des1[:, np.newaxis, :] - des2[np.newaxis, :, :]) ** 2, axis=-1)))
+        outimg = np.concatenate((frameL, frameR), axis=1)
         for j in range(len(des_stripesL)):
             des_stripesL[j] = np.array(des_stripesL[j])
             kp_stripesL[j] = np.array(kp_stripesL[j])
@@ -297,8 +323,9 @@ while capL.isOpened() and capR.isOpened():
                     kp_struct.append(((uL, vL), (uR, vR)))
                     if disparity + frameL.shape[1] > 0:
                         disparity_map.append(disparity + frameL.shape[1])
-                        cv2.circle(frameL, (uL, vL), 3, (255, 0, 0), 1)
-                        cv2.circle(frameR, (uR - frameL.shape[1], vR), 3, (255, 0, 0), 1)
+                        cv2.circle(outimg, (uL, vL), 3, (255, 0, 0), 1)
+                        cv2.circle(outimg, (uR, vR), 3, (255, 0, 0), 1)
+                        cv2.line(outimg, (uL, vL), (uR, vR), (255, 0, 0), 1)
 
             #     cv2.circle(finalL, (int(kp_stripesL[j, i[0]].pt[0]), int(kp_stripesL[j, i[0]].pt[1])), 4, (10 * i, 0, 0), 1)
             #     cv2.circle(finalR, (int(kp_stripesR[j, i[1]].pt[0]), int(kp_stripesR[j, i[1]].pt[1])), 4, (10 * i, 0, 0), 1)
@@ -310,7 +337,7 @@ while capL.isOpened() and capR.isOpened():
             #         good.append(m)
         n_kp = len(kp_struct)
         # print(n_kp)
-        outimg = np.concatenate((frameL, frameR), axis=1)
+
         fig = None
         if len(disparity_map) > 2:
             d_main = np.mean(disparity_map)
@@ -335,27 +362,36 @@ while capL.isOpened() and capR.isOpened():
                 # print(val)
                 d_main_background = np.mean(disparity_map_star[disparity_map_star <= val])
                 dist_bg = round(0.001 * focal_lenght * baseline / d_main_background, 2)
+                #filtered_bg = lfilter(taps, 1.0, dist_bg)
                 print("d_main_background: ", round(d_main_background, 2), 'distance_background: ', dist_bg, "m")
                 d_main_object = np.mean(disparity_map_star[disparity_map_star > val])
                 dist_ob = round(0.001 * focal_lenght * baseline / d_main_object, 2)
-                print("d_main_object: ", round(d_main_object, 2), 'distance_object: ', dist_ob, "m")
+                dist_filter.append(dist_ob)
+                if len(dist_filter)>12:
+                    print('fatto')
+                    dist_filter=dist_filter[len(dist_filter)-12:-1]
+                    print(dist_filter)
+                filtered_ob = lfilter(taps, 1.0, dist_filter)
+                print("d_main_object: ", round(d_main_object, 2), 'distance_object: ', filtered_ob[-1], "m")
             else:
                 d_main_object = np.mean(disparity_map_star)
                 dist_ob = round(0.001 * focal_lenght * baseline / d_main_object, 2)
-                print("d_main: ", round(d_main_object, 2), 'distance: ', dist_ob, "m")
+                dist_filter.append(dist_ob)
+                filtered_ob = lfilter(taps, 1.0, dist_filter)
+                print("d_main: ", round(d_main_object, 2), 'distance: ', filtered_ob[-1], "m")
                 flag = False
         else:
 
             if flag == False:
-                print("d_main ~ ", round(d_main_object, 2), 'distance ~ ', dist_ob, "m")
+                print("d_main ~ ", round(d_main_object, 2), 'distance ~ ', filtered_ob[-1], "m")
             else:
-                print("d_main <= ", round(d_main_object, 2), 'distance <= ', dist_ob, "m")
+                print("d_main <= ", round(d_main_object, 2), 'distance <= ', filtered_ob[-1], "m")
             flag = True
         # cv2.putText(outimg, d_main, (10, 10), cv2.FONT_ITALIC, 2, 255)
 
-        for m in range(len(kp_struct)):
-            cv2.line(outimg, kp_struct[m][0], kp_struct[m][1], (255, 0, 0), 1)
-        if dist_ob <= 0.8:
+        # for m in range(len(kp_struct)):
+        #         cv2.line(outimg, kp_struct[m][0], kp_struct[m][1], (255, 0, 0), 1)
+        if filtered_ob[-1] <= 0.8:
             print('Warning: object too close')
 
         # for i in range(int(min(des_stripesL.__len__(), des_stripesR.__len__()))):
@@ -378,23 +414,26 @@ while capL.isOpened() and capR.isOpened():
         # d0 = temp_dim
 
 
-        m = (30 - 60)/27
-        q = 60 - m*3
+        m = (30 - 60)/25
+        q = 60 - m*5
         if 128 > d_main_object >= 0:
-            if n_kp <= 3:
+            if n_kp <= 5:
                 temp_dim = 100
-            elif 3 < n_kp <30:
+            elif 5 < n_kp <30:
                 temp_dim = int(m*n_kp+q)
             else:
                 temp_dim = 50
-
-        dist_vect[4] = dist_vect[3]
-        dist_vect[3] = dist_vect[2]
-        dist_vect[2] = dist_vect[1]
-        dist_vect[1] = dist_vect[0]
+        print('initial dist vect',dist_vect)
+        # dist_vect[4] = dist_vect[3]
+        # dist_vect[3] = dist_vect[2]
+        # dist_vect[2] = dist_vect[1]
+        # dist_vect[1] = dist_vect[0]
+        # dist_vect[0] = temp_dim
+        for i in range(len(dist_vect)-1, 0, -1):
+            dist_vect[i] = dist_vect[i-1]
         dist_vect[0] = temp_dim
-
-
+        print(temp_dim)
+        print('final dist vect',dist_vect)
         dim_kp = int(np.mean(dist_vect))
         # print("n_kp: ", n_kp)
         # good = []
@@ -497,4 +536,4 @@ capL.release()
 capR.release()
 
 cv2.destroyAllWindows()
-cv2.imshow("outimg", outimg)
+
