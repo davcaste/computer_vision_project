@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 from skimage import filters
 import matplotlib.pyplot as plt
+from scipy.signal import lfilter
 
 capL = cv2.VideoCapture('robotL.avi')
 capR = cv2.VideoCapture('robotR.avi')
@@ -10,15 +11,6 @@ baseline = 92.226  # in mm
 dim_kp = 30
 h_stripe = 2
 max_kp = []
-# d4 = 2
-
-# d3 = 2
-
-# d2 = 2
-
-# d1 = 2
-
-# d0 = 2
 dist = 3
 dist_vect = np.ones((5,), dtype='int') * dim_kp
 d_main = ((baseline * focal_lenght) / dist) * 0.001
@@ -26,11 +18,8 @@ d_main_object = d_main
 d_main_background = d_main
 dist_ob = dist
 dist_bg = dist
-print(d_main)
 temp_dim = dim_kp
 flag = False
-n_square = 4
-m_square = 4
 min_disp = 0
 max_disp = 64
 tot_dist = []
@@ -43,6 +32,194 @@ filtered_dist_bkg = [d_main, d_main]
 first_o = True
 first_b = True
 treshold_o = 0.5
+
+n_frame = 0
+tot_dist_filt = []
+tot_dist_bg_filt = []
+
+
+#------------------------------------------------
+# Create a FIR filter and apply it to x.
+#------------------------------------------------
+
+# Define cutoff frequency
+frame_rate = 15
+Cutoff_freq = 0.5
+d0 = 3
+
+# Calculate Nyquist frequency
+Nyq_frequency = frame_rate / 2
+Cutoff_norm = Cutoff_freq / Nyq_frequency
+# FIR order
+order = 6
+# Coefficinets of the FIR filter
+FIR_coeff = [-0.00545737100067199, 0.0317209689414059, 0.254972364809816, 0.437528074498901, 0.254972364809816, 0.0317209689414059, -0.00545737100067199]
+WS = len(FIR_coeff)
+x = list(3*np.ones(WS))
+y = list(3*np.ones(WS))
+x_bg = list(3*np.ones(WS))
+y_bg = list(3*np.ones(WS))
+
+def image_initialization(frame_L, frameR, dim_kp):
+    # Capture frame-by-frame
+    # Display the resulting frame
+    cv2.rectangle(frameL, (int(frameL.shape[1] / 2) - dim_kp, int(frameL.shape[0] / 2) - dim_kp),
+                  (int(frameL.shape[1] / 2) + dim_kp, int(frameL.shape[0] / 2) + dim_kp), 250, 1)
+    cv2.rectangle(frameR, (int(frameR.shape[1] / 2) - dim_kp, int(frameR.shape[0] / 2) - dim_kp),
+                  (int(frameR.shape[1] / 2) + dim_kp, int(frameR.shape[0] / 2) + dim_kp), 250, 1)
+    centerL = frameL[int(frameL.shape[0] / 2) - dim_kp: int(frameL.shape[0] / 2) + dim_kp,
+              int(frameL.shape[1] / 2) - dim_kp:int(frameL.shape[1] / 2) + dim_kp]
+    centerR = frameR[int(frameR.shape[0] / 2) - dim_kp: int(frameR.shape[0] / 2) + dim_kp,
+              int(frameR.shape[1] / 2) - dim_kp:int(frameR.shape[1] / 2) + dim_kp]
+    total_grayL = cv2.cvtColor(frameL, cv2.COLOR_BGR2GRAY)
+    total_intermediateL = cv2.equalizeHist(total_grayL)
+    total_finalL = total_intermediateL
+    grayL = cv2.cvtColor(centerL, cv2.COLOR_BGR2GRAY)
+    intermediateL = cv2.equalizeHist(grayL)
+    finalL = cv2.medianBlur(intermediateL, 5)
+    # cv2.bilateralFilter(grayL, 5, 3, 3)
+
+    # cv2.equalizeHist(intermediateL)
+
+    # intermediateL
+
+    # cv2.medianBlur(intermediateL, 5)
+
+    # cv2.GaussianBlur(intermediateL, (3, 3), 3)
+    grayR = cv2.cvtColor(centerR, cv2.COLOR_BGR2GRAY)
+    intermediateR = cv2.equalizeHist(grayR)
+    finalR = cv2.medianBlur(intermediateR, 5)
+    # cv2.bilateralFilter(grayR, 5, 3, 3)
+
+    # cv2.equalizeHist(intermediateR)
+
+    # intermediateR
+
+    # cv2.medianBlur(intermediateR, 5)
+    return finalL, finalR
+
+def keypoints_division(kpL, kpR, desL, desR, h_stripe, n_stripes):
+    # image_stripesL = np.zeros((int(finalL.shape[1] / h_stripe), h_stripe, finalL.shape[0]),
+    #                           dtype='uint8')  # NxHxL where N = n of stripes, H = height of stripes, L = lenght of window
+    # image_stripesR = np.zeros((int(finalR.shape[1] / h_stripe), h_stripe, finalR.shape[0]), dtype='uint8')
+    kp_stripesL = []
+    kp_stripesR = []
+    des_stripesL = []
+    des_stripesR = []
+
+    # cv2.imshow('f',frameL)
+    # FLANN parameters
+    # FLANN_INDEX_KDTREE = 0
+    # index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
+    # search_params = dict(checks=50)
+    # matches = np.zeros((int(finalL.shape[1] / h_stripe)), dtype='object')
+    # good = []
+    # ptsL = []
+    # ptsR = []
+    #
+    # flann = cv2.FlannBasedMatcher(index_params, search_params)
+    # for i in range(int(finalL.shape[1] / h_stripe)):
+    #     if kp_stripesL[i] == 0:
+    #         kp_stripesL[i] = []
+    #     if kp_stripesR[i] == 0:
+    #         kp_stripesR[i] = []
+    #     for j in range(len(kp2)):
+    #         if i*h_stripe <= kp2[j].pt[1] < (i+1)*h_stripe:
+    #             kp_stripesL[i].append(kp2[j])
+    #     for j in range(len(kp1)):
+    #         if i * h_stripe <= kp1[j].pt[1] < (i + 1) * h_stripe:
+    #             kp_stripesR[i].append(kp1[j])
+
+    for s in range(n_stripes):
+        kp_stripesL.append([])
+        kp_stripesR.append([])
+        des_stripesL.append([])
+        des_stripesR.append([])
+        for j in range(len(kpL)):
+            if s * h_stripe <= kpL[j].pt[1] < (s + 1) * h_stripe:
+                kp_stripesL[s].append(kpL[j])
+                des_stripesL[s].append(desL[j])
+        for j in range(len(kpR)):
+            if s * h_stripe <= kpR[j].pt[1] < (s + 1) * h_stripe:
+                kp_stripesR[s].append(kpR[j])
+                des_stripesR[s].append(desR[j])
+    # print(len(des_stripesL))
+    des_stripesL = np.array(des_stripesL)
+    kp_stripesL = np.array(kp_stripesL)
+    des_stripesR = np.array(des_stripesR)
+    kp_stripesR = np.array(kp_stripesR)
+    return kp_stripesL, des_stripesL, kp_stripesR, des_stripesR
+
+def estimation_chessboard(frameL):
+    found, corners = cv2.findChessboardCorners(frameL, (6,8))
+    cv2.drawChessboardCorners(frameL, (6,8), corners, found)
+    if found:
+        pt = (corners[0],corners[-1])
+        cv2.circle(frameL,(pt[0][0][0],pt[0][0][1]),8,(0,255,0),1)
+        cv2.circle(frameL,(pt[1][0][0],pt[1][0][1]),8,(0,255,0),1)
+        l_chess = pt[1][0][0] - pt[0][0][0]
+        h_chess = pt[1][0][1] - pt[0][0][1]
+        l_chess_mm = ((dist_ob*l_chess)/focal_lenght) * 1000
+        h_chess_mm = ((dist_ob*h_chess)/focal_lenght) *1000
+        print('l, h in pixels', l_chess, h_chess)
+        print('l, h in mm', l_chess_mm,h_chess_mm)
+
+
+def disparity_map_calculation(kp_stripesL, des_stripesL, kp_stripesR, des_stripesR):
+    distance = []
+    disparity_map = []
+    kp_struct = []
+    # distance = np.zeros((int(finalR.shape[1] / h_stripe),), dtype='object')
+
+    # distance[i, :, :] = np.array(np.sqrt(np.sum((des_stripesL[i][:, np.newaxis, :] - des_stripesR[i][np.newaxis, :, :]) ** 2, axis=-1)))
+
+    # distance = np.array(np.sqrt(np.sum((des1[:, np.newaxis, :] - des2[np.newaxis, :, :]) ** 2, axis=-1)))
+
+    for j in range(len(des_stripesL)):
+        des_stripesL[j] = np.array(des_stripesL[j])
+        kp_stripesL[j] = np.array(kp_stripesL[j])
+        des_stripesR[j] = np.array(des_stripesR[j])
+        kp_stripesR[j] = np.array(kp_stripesR[j])
+        distance.append([])
+        if len(kp_stripesL[j]) > 0 and len(kp_stripesR[j]) > 0:
+            distance[j] = np.array(np.sqrt(
+                np.sum((des_stripesL[j][:, np.newaxis, :] - des_stripesR[j][np.newaxis, :, :]) ** 2, axis=-1)))
+            ind = tuple(zip(*np.where(distance[j] < 150)))
+            index = list(ind)
+            removed = np.ones(len(ind), dtype='uint8')
+            for y in range(len(ind) - 1):
+                check = False
+                if removed[y] == 1:
+                    for z in range(y + 1, len(ind)):
+                        if ind[y][0] == ind[z][0] or ind[y][1] == ind[z][1]:
+                            if distance[j][ind[y]] < distance[j][ind[z]]:
+                                if removed[z] == 1:
+                                    # print(ind[k])
+                                    index.remove(ind[z])
+                                    removed[z] = 0
+                            else:
+                                if removed[y] == 1:
+                                    # print('ciao', ind[i])
+                                    index.remove(ind[y])
+                                    removed[y] = 0
+            index = tuple(index)
+
+            for y in index:
+                uL = int(kp_stripesL[j][y[0]].pt[0] + off_x_L)
+                uR = int(kp_stripesR[j][y[1]].pt[0] + off_x_R)
+                vL = int(kp_stripesL[j][y[0]].pt[1] + off_y_L)
+                vR = int(kp_stripesR[j][y[1]].pt[1] + off_y_R)
+                disparity = uL - uR
+                kp_struct.append(((uL, vL), (uR, vR)))
+                if disparity + frameL.shape[1] > 0:
+                    disparity_map.append(disparity + frameL.shape[1])
+                    cv2.circle(outimg, (uL, vL), 3, (255, 0, 0), 1)
+                    cv2.circle(outimg, (uR, vR), 3, (255, 0, 0), 1)
+                    cv2.line(outimg, (uL, vL), (uR, vR), (255, 0, 0), 1)
+    num_kp = len(kp_struct)
+    return disparity_map, num_kp
+
+
 if not capL.isOpened():
     print("Error opening video stream or file")
 
@@ -57,42 +234,7 @@ while capL.isOpened() and capR.isOpened():
     retR, frameR = capR.read()
 
     if retL is True and retR is True:
-        # Capture frame-by-frame
-        # Display the resulting frame
-        cv2.rectangle(frameL, (int(frameL.shape[1] / 2) - dim_kp, int(frameL.shape[0] / 2) - dim_kp),
-                      (int(frameL.shape[1] / 2) + dim_kp, int(frameL.shape[0] / 2) + dim_kp), 250, 1)
-        cv2.rectangle(frameR, (int(frameR.shape[1] / 2) - dim_kp, int(frameR.shape[0] / 2) - dim_kp),
-                      (int(frameR.shape[1] / 2) + dim_kp, int(frameR.shape[0] / 2) + dim_kp), 250, 1)
-        centerL = frameL[int(frameL.shape[0] / 2) - dim_kp: int(frameL.shape[0] / 2) + dim_kp,
-                  int(frameL.shape[1] / 2) - dim_kp:int(frameL.shape[1] / 2) + dim_kp]
-        centerR = frameR[int(frameR.shape[0] / 2) - dim_kp: int(frameR.shape[0] / 2) + dim_kp,
-                  int(frameR.shape[1] / 2) - dim_kp:int(frameR.shape[1] / 2) + dim_kp]
-        total_grayL = cv2.cvtColor(frameL, cv2.COLOR_BGR2GRAY)
-        total_intermediateL = cv2.equalizeHist(total_grayL)
-        total_finalL = total_intermediateL
-        grayL = cv2.cvtColor(centerL, cv2.COLOR_BGR2GRAY)
-        intermediateL = cv2.equalizeHist(grayL)
-
-        finalL = cv2.medianBlur(intermediateL, 5)
-        # cv2.bilateralFilter(grayL, 5, 3, 3)
-
-        # cv2.equalizeHist(intermediateL)
-
-        # intermediateL
-
-        # cv2.medianBlur(intermediateL, 5)
-
-        # cv2.GaussianBlur(intermediateL, (3, 3), 3)
-        grayR = cv2.cvtColor(centerR, cv2.COLOR_BGR2GRAY)
-        intermediateR = cv2.equalizeHist(grayR)
-        finalR = cv2.medianBlur(intermediateR, 5)
-        # cv2.bilateralFilter(grayR, 5, 3, 3)
-
-        # cv2.equalizeHist(intermediateR)
-
-        # intermediateR
-
-        # cv2.medianBlur(intermediateR, 5)
+        finalL, finalR = image_initialization(frameL, frameR, dim_kp)
         info_frame = np.empty_like(finalL)
         H = frameL.shape[0]
         L = frameL.shape[1]
@@ -120,7 +262,6 @@ while capL.isOpened() and capR.isOpened():
 
         # cv2.imshow('t1',finalL)
 
-        # print('dentro')
 
         # center_tempL = frameL[int(frameL.shape[0] / 2) - dim: int(frameL.shape[0] / 2) + dim,
 
@@ -259,168 +400,22 @@ while capL.isOpened() and capR.isOpened():
         # #     DETECT THE KPTS IN THE WHOLE IMAGES
         kpL, desL = sift.detectAndCompute(finalL, None)
         kpR, desR = sift.detectAndCompute(finalR, None)
+
         # draw key points detected
 
         # img2 = cv2.drawKeypoints(finalL, kp2, finalL, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
-
         # cv2.line(img2, (0, h_stripe), (img2.shape[1], h_stripe), (255,0,0))
-
         # cv2.imshow("grayframeL", img2)
-
         # img1 = cv2.drawKeypoints(finalR, kp1, finalR, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
-
         # cv2.imshow("grayframeR", img1)
-        image_stripesL = np.zeros((int(finalL.shape[1] / h_stripe), h_stripe, finalL.shape[0]),
-                                  dtype='uint8')  # NxHxL where N = n of stripes, H = height of stripes, L = lenght of window
-        image_stripesR = np.zeros((int(finalR.shape[1] / h_stripe), h_stripe, finalR.shape[0]), dtype='uint8')
-        kp_stripesL = []
-        kp_stripesR = []
-        des_stripesL = []
-        des_stripesR = []
-        # found, corners = cv2.findChessboardCorners(frameL, (6,8))
+        n_stripes = int(finalL.shape[1] / h_stripe)
+        kp_stripesL, des_stripesL, kp_stripesR, des_stripesR = keypoints_division(kpL, kpR, desL, desR, h_stripe, n_stripes)
+        estimation_chessboard(frameL)
 
-        # cv2.drawChessboardCorners(frameL, (6,8), corners, found)
-
-        # if found == True:
-
-        #     pt = (corners[0],corners[-1])
-
-        #     cv2.circle(frameL,(pt[0][0][0],pt[0][0][1]),8,(0,255,0),1)
-
-        #     cv2.circle(frameL,(pt[1][0][0],pt[1][0][1]),8,(0,255,0),1)
-
-        #     l_chess = pt[1][0][0] - pt[0][0][0]
-
-        #     h_chess = pt[1][0][1] - pt[0][0][1]
-
-        #     l_chess_mm = (dist*l_chess)/focal_lenght
-
-        #     h_chess_mm = (dist*h_chess)/focal_lenght
-
-        #     print('ciao', l_chess_mm,h_chess_mm)
-
-        #
-
-        # cv2.imshow('f',frameL)
-
-        # FLANN parameters
-
-        # FLANN_INDEX_KDTREE = 0
-
-        # index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
-
-        # search_params = dict(checks=50)
-
-        # matches = np.zeros((int(finalL.shape[1] / h_stripe)), dtype='object')
-
-        # good = []
-
-        # ptsL = []
-
-        # ptsR = []
-
-        #
-
-        # flann = cv2.FlannBasedMatcher(index_params, search_params)
-
-        # for i in range(int(finalL.shape[1] / h_stripe)):
-
-        #     if kp_stripesL[i] == 0:
-
-        #         kp_stripesL[i] = []
-
-        #     if kp_stripesR[i] == 0:
-
-        #         kp_stripesR[i] = []
-
-        #     for j in range(len(kp2)):
-
-        #         if i*h_stripe <= kp2[j].pt[1] < (i+1)*h_stripe:
-
-        #             kp_stripesL[i].append(kp2[j])
-
-        #     for j in range(len(kp1)):
-
-        #         if i * h_stripe <= kp1[j].pt[1] < (i + 1) * h_stripe:
-
-        #             kp_stripesR[i].append(kp1[j])
-        for i in range(int(finalL.shape[1] / h_stripe)):
-            kp_stripesL.append([])
-            kp_stripesR.append([])
-            des_stripesL.append([])
-            des_stripesR.append([])
-            for j in range(len(kpL)):
-                if i * h_stripe <= kpL[j].pt[1] < (i + 1) * h_stripe:
-                    kp_stripesL[i].append(kpL[j])
-                    des_stripesL[i].append(desL[j])
-            for j in range(len(kpR)):
-                if i * h_stripe <= kpR[j].pt[1] < (i + 1) * h_stripe:
-                    kp_stripesR[i].append(kpR[j])
-                    des_stripesR[i].append(desR[j])
-        # print(len(des_stripesL))
-        des_stripesL = np.array(des_stripesL)
-        kp_stripesL = np.array(kp_stripesL)
-        des_stripesR = np.array(des_stripesR)
-        kp_stripesR = np.array(kp_stripesR)
-        distance = []
-        disparity_map = []
-        kp_struct = []
-        # distance = np.zeros((int(finalR.shape[1] / h_stripe),), dtype='object')
-
-        # distance[i, :, :] = np.array(np.sqrt(np.sum((des_stripesL[i][:, np.newaxis, :] - des_stripesR[i][np.newaxis, :, :]) ** 2, axis=-1)))
-
-        # distance = np.array(np.sqrt(np.sum((des1[:, np.newaxis, :] - des2[np.newaxis, :, :]) ** 2, axis=-1)))
         outimg = np.concatenate((frameL, frameR), axis=1)
-        for j in range(len(des_stripesL)):
-            des_stripesL[j] = np.array(des_stripesL[j])
-            kp_stripesL[j] = np.array(kp_stripesL[j])
-            des_stripesR[j] = np.array(des_stripesR[j])
-            kp_stripesR[j] = np.array(kp_stripesR[j])
-            distance.append([])
-            # print(kp_stripesL[j].__len__(), " ", kp_stripesR[j].__len__())
-            if kp_stripesL[j].__len__() > 0 and kp_stripesR[j].__len__() > 0:
-                distance[j] = np.array(np.sqrt(
-                    np.sum((des_stripesL[j][:, np.newaxis, :] - des_stripesR[j][np.newaxis, :, :]) ** 2, axis=-1)))
-                ind = tuple(zip(*np.where(distance[j] < 150)))  ### GUARDA QUI!!!!!!!!!!!!!!!
-                index = list(ind)
-                # print(ind)
 
-                # print(index)
-                removed = np.ones(len(ind), dtype='uint8')
-                for i in range(len(ind) - 1):
-                    check = False
-                    if removed[i] == 1:
-                        for k in range(i + 1, len(ind)):
-                            if ind[i][0] == ind[k][0] or ind[i][1] == ind[k][1]:
-                                if distance[j][ind[i]] < distance[j][ind[k]]:
-                                    if removed[k] == 1:
-                                        # print(ind[k])
-                                        index.remove(ind[k])
-                                        removed[k] = 0
-                                else:
-                                    if removed[i] == 1:
-                                        # print('ciao', ind[i])
-                                        index.remove(ind[i])
-                                        removed[i] = 0
-                index = tuple(index)
-                # print(removed)
+        disparity_map, n_kp = disparity_map_calculation(kp_stripesL, des_stripesL, kp_stripesR, des_stripesR)
 
-                # print('ind after cleaning',ind)
-
-                # print('ind after cleaning',index)
-                for i in index:
-                    uL = int(kp_stripesL[j][i[0]].pt[0] + off_x_L)
-                    uR = int(kp_stripesR[j][i[1]].pt[0] + off_x_R)
-                    vL = int(kp_stripesL[j][i[0]].pt[1] + off_y_L)
-                    vR = int(kp_stripesR[j][i[1]].pt[1] + off_y_R)
-                    disparity = uL - uR
-                    # print("(", uL, ", ",  vL, ") ", "(", uR, ", ",  vR, ") ", disparity)
-                    kp_struct.append(((uL, vL), (uR, vR)))
-                    if disparity + frameL.shape[1] > 0:
-                        disparity_map.append(disparity + frameL.shape[1])
-                        cv2.circle(outimg, (uL, vL), 3, (255, 0, 0), 1)
-                        cv2.circle(outimg, (uR, vR), 3, (255, 0, 0), 1)
-                        cv2.line(outimg, (uL, vL), (uR, vR), (255, 0, 0), 1)
             #     cv2.circle(finalL, (int(kp_stripesL[j, i[0]].pt[0]), int(kp_stripesL[j, i[0]].pt[1])), 4, (10 * i, 0, 0), 1)
 
             #     cv2.circle(finalR, (int(kp_stripesR[j, i[1]].pt[0]), int(kp_stripesR[j, i[1]].pt[1])), 4, (10 * i, 0, 0), 1)
@@ -435,86 +430,104 @@ while capL.isOpened() and capR.isOpened():
         #     if m.distance < 0.8 * n.distance:
 
         #         good.append(m)
-        n_kp = len(kp_struct)
-        # print(n_kp)
 
-        fig = None
+
         if len(disparity_map) > 2:
             d_main = np.mean(disparity_map)
-            # print(d_main)
-
             # min_disp = d_main - 32
-
             # max_disp = d_main + 32
             disparity_map = np.array(disparity_map)
-            # disparity_map_star = disparity_map < max_disp
-
-            # disparity_map_star = disparity_map > min_disp
             disparity_map_star = np.ma.masked_inside(disparity_map, min_disp, max_disp)
             min_disp = d_main - (d_main / 2)
             max_disp = d_main + (d_main / 2)
-            # disp_tot = (disparity_map_star.all() == disparity_map_star1.all())
             disparity_map_star = disparity_map[disparity_map_star.mask]
             std_dev = np.std(disparity_map_star)
-            if std_dev > 0:#(2 / dist_ob):
+            if std_dev > 0:  # (2 / dist_ob):
                 val = filters.threshold_otsu(disparity_map_star)
-                # print(val)
                 d_main_background = np.mean(disparity_map_star[disparity_map_star <= val])
                 dist_bg = round(0.001 * focal_lenght * baseline / d_main_background, 2)
                 d_main_object = np.mean(disparity_map_star[disparity_map_star > val])
                 dist_ob = round(0.001 * focal_lenght * baseline / d_main_object, 2)
+                if dist_bg - dist_ob < 0.1:
+                    dist_bg = filtered_dist_bkg[0]
+
                 filtered_dist_bkg[1] = dist_bg
                 filtered_dist_obj[1] = dist_ob
-                if abs(filtered_dist_bkg[0] - filtered_dist_bkg[1]) < treshold_o or first_b:
-                    print("d_main_background: ", round(d_main_background, 2), 'distance_background: ', dist_bg, "m")
-                    filtered_dist_bkg[0] = dist_bg
-                    tot_dist_bg.append(dist_bg)
-                    first_b = False
-                else:
-                    print("outliers, d_main_background: ", round(d_main_background, 2), 'distance_object: ', filtered_dist_bkg[0], "m")
-                    tot_dist_bg.append(filtered_dist_bkg[0])
-                    count_b += 1
-                if count_b == 10:
-                    filtered_dist_bkg[0] = dist_bg
-                    count_b = 0
 
                 if abs(filtered_dist_obj[0] - filtered_dist_obj[1]) < treshold_o or first_o:
-                    print("d_main_object: ", round(d_main_object, 2), 'distance_object: ', dist_ob, "m")
                     tot_dist.append(dist_ob)
                     filtered_dist_obj[0] = dist_ob
                     first_o = False
                 else:
-                    print("outliers, d_main_object: ", round(d_main_object, 2), 'distance_object: ', filtered_dist_obj[0], "m")
                     tot_dist.append(filtered_dist_obj[0])
                     count_o += 1
                 if count_o == 10:
                     filtered_dist_obj[0] = dist_ob
                     count_o = 0
+
+                if abs(filtered_dist_bkg[0] - filtered_dist_bkg[1]) < treshold_o or first_b:
+                    filtered_dist_bkg[0] = dist_bg
+                    tot_dist_bg.append(dist_bg)
+                    first_b = False
+                else:
+                    tot_dist_bg.append(filtered_dist_bkg[0])
+                    count_b += 1
+                if count_b == 10:
+                    filtered_dist_bkg[0] = dist_bg
+                    count_b = 0
                 count1 += 1
             else:
                 d_main_object = np.mean(disparity_map_star)
                 dist_ob = round(0.001 * focal_lenght * baseline / d_main_object, 2)
-                print("d_main: ", round(d_main_object, 2), 'distance: ', dist_ob, "m")
                 tot_dist.append(filtered_dist_obj[0])
                 tot_dist_bg.append(filtered_dist_bkg[0])
-                flag = False
                 count1 += 1
         else:
-            if not flag:
-                print("d_main_background ~ ", round(d_main_background, 2), 'distance_background ~ ', dist_bg, "m")
-                print("d_main_object ~ ", round(d_main_object, 2), 'distance_object ~ ', dist_ob, "m")
-
-            else:
-                print("d_main_background <= ", round(d_main_background, 2), 'distance_background ~ ', dist_bg, "m")
-                print("d_main_object <= ", round(d_main_object, 2), 'distance_object <= ', dist_ob, "m")
             count1 += 1
             tot_dist.append(dist_ob)
             tot_dist_bg.append(dist_bg)
-            flag = True
 
         # cv2.putText(outimg, d_main, (10, 10), cv2.FONT_ITALIC, 2, 255)
-        if dist_ob <= 0.8:
-            print('Warning: object too close')
+        if n_frame < WS:
+            tot_dist_filt.append(d0)
+            tot_dist_bg_filt.append(d0)
+        else:
+            x = tot_dist[(n_frame - WS): n_frame]
+            y = lfilter(FIR_coeff, 1, x)
+            tot_dist_filt.append(y[-1])
+            x_bg = tot_dist_bg[(n_frame - WS): n_frame]
+            y_bg = lfilter(FIR_coeff, 1, x_bg)
+            tot_dist_bg_filt.append(y_bg[-1])
+
+        n_frame = n_frame + 1
+
+        if y[-1] <= 0.8:
+            warning = 'Warning: object too close!!!'
+            cv2.putText(outimg, warning, (10, 50), cv2.FONT_ITALIC, 1, (0, 255, 255))
+        # for i in range(int(min(des_stripesL.__len__(), des_stripesR.__len__()))):
+
+        #     try:
+
+        #         cv2.drawMatchesKnn(finalL, kp_stripesL[i], finalR, kp_stripesR[i], good[i], outimg)
+
+        #         cv2.knn
+
+        #     except(SystemError):
+
+        #         continue
+
+        # kpL = kp_stripesL[4]
+
+        # kpR = kp_stripesR[4]
+
+        # outimg = cv2.resize(outimg, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+
+        info_dist = 'Distance from the obstacle: ' + str(round(y[-1], 2)) + 'm'
+        info_dist_bg = 'Distance from the background: ' + str(round(y_bg[-1], 2)) + 'm'
+        cv2.putText(outimg, info_dist, (10, 75), cv2.FONT_ITALIC, 1, (0, 255, 255))
+        cv2.putText(outimg, info_dist_bg, (10, 100), cv2.FONT_ITALIC, 1, (0, 255, 255))
+
+        cv2.imshow("outimg", outimg)
         # for i in range(int(min(des_stripesL.__len__(), des_stripesR.__len__()))):
 
         #     try:
@@ -558,15 +571,6 @@ while capL.isOpened() and capR.isOpened():
             else:
                 temp_dim = 50
 
-        # dist_vect[4] = dist_vect[3]
-        #
-        # dist_vect[3] = dist_vect[2]
-        #
-        # dist_vect[2] = dist_vect[1]
-        #
-        # dist_vect[1] = dist_vect[0]
-        #
-        # dist_vect[0] = temp_dim
         for i in range(len(dist_vect) - 1, 0, -1):
             dist_vect[i] = dist_vect[i - 1]
         dist_vect[0] = temp_dim
@@ -754,6 +758,8 @@ while capL.isOpened() and capR.isOpened():
 capL.release()
 capR.release()
 cv2.destroyAllWindows()
-plt.plot(range(count1), tot_dist)
-plt.plot(range(count1), tot_dist_bg)
+# plt.plot(range(1, count1), tot_dist[1:])
+# plt.plot(range(1, count1), tot_dist_bg[1:])
+plt.plot(range(1, n_frame),tot_dist_bg_filt[1:])
+plt.plot(range(1, n_frame),tot_dist_filt[1:])
 plt.show()
