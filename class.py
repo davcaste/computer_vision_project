@@ -48,20 +48,15 @@ class Myfilter:
 class Robot:
     def __init__(self, f_length, base, h_str):
         self.focal_lenght = f_length
-        print(self.focal_lenght)
         self.baseline = base
-        print(self.baseline)
         self.h_stripe = h_str
         self.dim_kp = 30
         self.min_disp = 0
-        self.max_disp = 0
+        self.max_disp = 64
         self.dist_ob = 3
         self.dist_bg = 3
         self.d_main_object = ((self.baseline * self.focal_lenght) / self.dist_ob) * 0.001
-        print(self.d_main_object)
-
         self.d_main_background = ((self.baseline * self.focal_lenght) / self.dist_bg) * 0.001
-        print(self.d_main_background)
         self.filtered_dist_obj = [self.dist_ob, self.dist_ob]
         self.filtered_dist_bkg = [self.dist_bg, self.dist_bg]
         self.treshold_o = 0.5
@@ -108,7 +103,6 @@ class Robot:
         grayR = cv2.cvtColor(centerR, cv2.COLOR_BGR2GRAY)
         intermediateR = cv2.equalizeHist(grayR)
         finalR = cv2.medianBlur(intermediateR, 5)
-
         return finalL, finalR
 
     def keypoints_division(self, kpL, kpR, desL, desR, n_stripes):
@@ -151,6 +145,7 @@ class Robot:
             h_chess_mm = ((dist_ob * h_chess) / self.focal_lenght) * 1000
             print('l, h in pixels', l_chess, h_chess)
             print('l, h in mm', l_chess_mm, h_chess_mm)
+
 
     def disparity_map_calculation(self, kp_stripesL, des_stripesL, kp_stripesR, des_stripesR):
         distance = []
@@ -208,6 +203,7 @@ class Robot:
             self.max_disp = d_main + (d_main / 2)
             disparity_map_star = disparity_map[disparity_map_star.mask]
             std_dev = np.std(disparity_map_star)
+
             if std_dev > 0:  # (2 / dist_ob):
                 val = filters.threshold_otsu(disparity_map_star)
                 self.d_main_background = np.mean(disparity_map_star[disparity_map_star <= val])
@@ -250,6 +246,7 @@ class Robot:
             self.count1 += 1
             self.tot_dist.append(self.filtered_dist_obj[0])
             self.tot_dist_bg.append(self.filtered_dist_bkg[0])
+
     def write_on_image(self, outimg):
         if myfilter.y[-1] <= 0.8:
             warning = 'Warning: object too close!!!'
