@@ -59,7 +59,7 @@ class Robot:
         self.d_main_background = ((self.baseline * self.focal_lenght) / self.dist_bg) * 0.001
         self.filtered_dist_obj = [self.dist_ob, self.dist_ob]
         self.filtered_dist_bkg = [self.dist_bg, self.dist_bg]
-        self.treshold_o = 0.5
+        self.treshold_o = 0.2
         self.first_o = True
         self.first_b = True
         self.tot_dist = []
@@ -132,9 +132,9 @@ class Robot:
         kp_stripesR = np.array(kp_stripesR)
         return kp_stripesL, des_stripesL, kp_stripesR, des_stripesR
 
-    def estimation_chessboard(self, frameL, dist_ob):
+    def estimation_chessboard(self, frameL, dist_ob, outimg):
         found, corners = cv2.findChessboardCorners(frameL, (6, 8))
-        cv2.drawChessboardCorners(frameL, (6, 8), corners, found)
+        cv2.drawChessboardCorners(outimg, (6, 8), corners, found)
         if found:
             pt = (corners[0], corners[-1])
             cv2.circle(frameL, (pt[0][0][0], pt[0][0][1]), 8, (0, 255, 0), 1)
@@ -143,11 +143,14 @@ class Robot:
             h_chess = pt[1][0][1] - pt[0][0][1]
             l_chess_mm = ((dist_ob * l_chess) / self.focal_lenght) * 1000
             h_chess_mm = ((dist_ob * h_chess) / self.focal_lenght) * 1000
-            # print('l, h in pixels', l_chess, h_chess)
-            # print('l, h in mm', l_chess_mm, h_chess_mm)
-            return l_chess_mm, l_chess, h_chess_mm, h_chess
-        else:
-            return -1, -1, -1, -1
+            if l_chess_mm > 0 and h_chess_mm > 0:
+                est_W = 'Estimate W: ' + str(round(l_chess_mm, 2)) + 'mm'
+                est_H = 'Estimate H: ' + str(round(h_chess_mm, 2)) + 'mm'
+                err = 'Error %: W ' + str(round((l_chess_mm - 125) / 125, 2)) + '% | H ' + str(round((h_chess_mm - 178) / 178, 2)) + '%'
+                cv2.putText(outimg, err, (650, 50), cv2.FONT_ITALIC, 1, (0, 255, 255))
+                cv2.putText(outimg, est_W, (650, 75), cv2.FONT_ITALIC, 1, (0, 255, 255))
+                cv2.putText(outimg, est_H, (650, 100), cv2.FONT_ITALIC, 1, (0, 255, 255))
+        return outimg
 
     def disparity_map_calculation(self, kp_stripesL, des_stripesL, kp_stripesR, des_stripesR):
         distance = []
@@ -218,21 +221,24 @@ class Robot:
                 self.filtered_dist_bkg[1] = self.dist_bg
                 self.filtered_dist_obj[1] = self.dist_ob
 
-                if abs(self.filtered_dist_obj[0] - self.filtered_dist_obj[1]) < self.treshold_o or self.first_o:
+                if (abs(self.filtered_dist_obj[0] - self.filtered_dist_obj[1]) < self.treshold_o) or self.first_o:
                     self.tot_dist.append(self.dist_ob)
                     self.filtered_dist_obj[0] = self.dist_ob
                     self.first_o = False
+                    self.count_o = 0
                 else:
                     self.tot_dist.append(self.filtered_dist_obj[0])
                     self.count_o += 1
+
                 if self.count_o == 10:
                     self.filtered_dist_obj[0] = self.dist_ob
                     self.count_o = 0
 
-                if abs(self.filtered_dist_bkg[0] - self.filtered_dist_bkg[1]) < self.treshold_o or self.first_b:
+                if (abs(self.filtered_dist_bkg[0] - self.filtered_dist_bkg[1]) < self.treshold_o) or self.first_b:
                     self.filtered_dist_bkg[0] = self.dist_bg
                     self.tot_dist_bg.append(self.dist_bg)
                     self.first_b = False
+                    self.count_b = 0
                 else:
                     self.tot_dist_bg.append(self.filtered_dist_bkg[0])
                     self.count_b += 1
@@ -264,20 +270,21 @@ class Robot:
         cv2.imshow("outimg", outimg)
         return outimg
     def square_dimention(self, n_kp):
-        m = (30 - 60) / 27
+        m = (20 - 60) / 57
         q = 60 - m * 3
         if 128 > self.d_main_object >= 0:
             if n_kp <= 3:
-                temp_dim = 100
-            elif 3 < n_kp < 30:
+                temp_dim = 200
+            elif 3 < n_kp < 60:
                 temp_dim = int(m * n_kp + q)
             else:
-                temp_dim = 50
+                temp_dim = 20
 
         for i in range(len(self.dist_vect) - 1, 0, -1):
             self.dist_vect[i] = self.dist_vect[i - 1]
         self.dist_vect[0] = temp_dim
         dim_kp = int(np.mean(self.dist_vect))
+        print(self.dist_vect[:])
         return dim_kp
 
 
@@ -309,23 +316,15 @@ while capL.isOpened() and capR.isOpened():
 
         n_stripes = int(finalL.shape[1] / myrob.h_stripe)
         kp_stripesL, des_stripesL, kp_stripesR, des_stripesR = myrob.keypoints_division(kpL, kpR, desL, desR, n_stripes)
-        l_chess_mm, l_chess, h_chess_mm, h_chess = myrob.estimation_chessboard(frameL, myrob.filtered_dist_obj[0])
-
         outimg = np.concatenate((frameL, frameR), axis=1)
-
-        if l_chess_mm > 0 and h_chess_mm > 0:
-            est_W = 'Estimate W: ' + str(round(l_chess_mm, 2)) + 'mm'
-            est_H = 'Estimate H: ' + str(round(h_chess_mm, 2)) + 'mm'
-            err = 'Error %: W ' + str(round((l_chess_mm - 125) / 125, 2)) + '% | H ' + str(round((h_chess_mm - 178) / 178, 2)) + '%'
-            cv2.putText(outimg, err, (650, 50), cv2.FONT_ITALIC, 1, (0, 255, 255))
-            cv2.putText(outimg, est_W, (650, 75), cv2.FONT_ITALIC, 1, (0, 255, 255))
-            cv2.putText(outimg, est_H, (650, 100), cv2.FONT_ITALIC, 1, (0, 255, 255))
-
+        outimg = myrob.estimation_chessboard(frameL, myrob.filtered_dist_obj[0], outimg)
         disparity_map, n_kp = myrob.disparity_map_calculation(kp_stripesL, des_stripesL, kp_stripesR, des_stripesR)
         myrob.distance_calculation(disparity_map)
         myfilter.filtering()
         outimg = myrob.write_on_image(outimg)
         myrob.dim_kp = myrob.square_dimention(n_kp)
+        print(n_kp, " ", myrob.dim_kp)
+
 
     if cv2.waitKey(25) & 0xFF == ord('q'):
         break
@@ -341,8 +340,8 @@ while capL.isOpened() and capR.isOpened():
 capL.release()
 capR.release()
 cv2.destroyAllWindows()
-# plt.plot(range(1, myrob.count1), myrob.tot_dist[1:])
-# plt.plot(range(1, myrob.count1), myrob.tot_dist_bg[1:])
+plt.plot(range(1, myrob.count1), myrob.tot_dist[1:])
+plt.plot(range(1, myrob.count1), myrob.tot_dist_bg[1:])
 plt.plot(range(1, myfilter.n_frame),myfilter.tot_dist_bg_filt[1:])
 plt.plot(range(1, myfilter.n_frame),myfilter.tot_dist_filt[1:])
 plt.show()
