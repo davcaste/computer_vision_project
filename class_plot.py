@@ -53,23 +53,19 @@ class Robot:
         self.dim_kp = 30
         self.min_disp = 0
         self.max_disp = 64
-        self.dist_ob = 3
-        self.dist_bg = 3
+        self.dist_ob = 2.6
+        self.dist_bg = 2.8
         self.d_main_object = ((self.baseline * self.focal_lenght) / self.dist_ob) * 0.001
         self.d_main_background = ((self.baseline * self.focal_lenght) / self.dist_bg) * 0.001
         self.filtered_dist_obj = [self.dist_ob, self.dist_ob]
         self.filtered_dist_bkg = [self.dist_bg, self.dist_bg]
         self.treshold_o = 0.2
-        self.first_o = True
-        self.first_b = True
         self.tot_dist = []
         self.tot_dist_bg = []
         self.count_o = 0
         self.count_b = 0
         self.count1 = 0
         self.dist_vect = np.ones((5,), dtype='int') * self.dim_kp
-
-
 
     def video_reading(self):
         capL = cv2.VideoCapture('robotL.avi')
@@ -146,7 +142,7 @@ class Robot:
             if l_chess_mm > 0 and h_chess_mm > 0:
                 est_W = 'Estimate W: ' + str(round(l_chess_mm, 2)) + 'mm'
                 est_H = 'Estimate H: ' + str(round(h_chess_mm, 2)) + 'mm'
-                err = 'Error %: W ' + str(round((l_chess_mm - 125) / 125, 2)) + '% | H ' + str(round((h_chess_mm - 178) / 178, 2)) + '%'
+                err = 'Error %: W ' + str(round(100*(l_chess_mm - 125) / 125, 2)) + '% | H ' + str(round(100*(h_chess_mm - 178) / 178, 2)) + '%'
                 cv2.putText(outimg, err, (650, 50), cv2.FONT_ITALIC, 1, (0, 255, 255))
                 cv2.putText(outimg, est_W, (650, 75), cv2.FONT_ITALIC, 1, (0, 255, 255))
                 cv2.putText(outimg, est_H, (650, 100), cv2.FONT_ITALIC, 1, (0, 255, 255))
@@ -179,7 +175,6 @@ class Robot:
                                         removed[z] = 0
                                 else:
                                     if removed[y] == 1:
-                                        # print('ciao', ind[i])
                                         index.remove(ind[y])
                                         removed[y] = 0
                 index = tuple(index)
@@ -203,9 +198,9 @@ class Robot:
         if len(disparity_map) > 2:
             d_main = np.mean(disparity_map)
             disparity_map = np.array(disparity_map)
-            disparity_map_star = np.ma.masked_inside(disparity_map, self.min_disp, self.max_disp)
             self.min_disp = d_main - (d_main / 2)
             self.max_disp = d_main + (d_main / 2)
+            disparity_map_star = np.ma.masked_inside(disparity_map, self.min_disp, self.max_disp)
             disparity_map_star = disparity_map[disparity_map_star.mask]
             std_dev = np.std(disparity_map_star)
 
@@ -221,10 +216,9 @@ class Robot:
                 self.filtered_dist_bkg[1] = self.dist_bg
                 self.filtered_dist_obj[1] = self.dist_ob
 
-                if (abs(self.filtered_dist_obj[0] - self.filtered_dist_obj[1]) < self.treshold_o) or self.first_o:
+                if (abs(self.filtered_dist_obj[0] - self.filtered_dist_obj[1]) < self.treshold_o):
                     self.tot_dist.append(self.dist_ob)
                     self.filtered_dist_obj[0] = self.dist_ob
-                    self.first_o = False
                     self.count_o = 0
                 else:
                     self.tot_dist.append(self.filtered_dist_obj[0])
@@ -234,10 +228,10 @@ class Robot:
                     self.filtered_dist_obj[0] = self.dist_ob
                     self.count_o = 0
 
-                if (abs(self.filtered_dist_bkg[0] - self.filtered_dist_bkg[1]) < self.treshold_o) or self.first_b:
+                if (abs(self.filtered_dist_bkg[0] - self.filtered_dist_bkg[1]) < self.treshold_o):
                     self.filtered_dist_bkg[0] = self.dist_bg
                     self.tot_dist_bg.append(self.dist_bg)
-                    self.first_b = False
+
                     self.count_b = 0
                 else:
                     self.tot_dist_bg.append(self.filtered_dist_bkg[0])
@@ -284,14 +278,13 @@ class Robot:
             self.dist_vect[i] = self.dist_vect[i - 1]
         self.dist_vect[0] = temp_dim
         dim_kp = int(np.mean(self.dist_vect))
-        print(self.dist_vect[:])
         return dim_kp
 
 
 
 myrob = Robot(567.2, 92.226, 2)
 coeff = [-0.00545737100067199, 0.0317209689414059, 0.254972364809816, 0.437528074498901, 0.254972364809816, 0.0317209689414059, -0.00545737100067199]
-myfilter = Myfilter(15, 0.5, 3, 6, coeff)
+myfilter = Myfilter(15, 0.5, 2.7, 6, coeff)
 capL, capR = myrob.video_reading()
 while capL.isOpened() and capR.isOpened():
 
@@ -323,7 +316,7 @@ while capL.isOpened() and capR.isOpened():
         myfilter.filtering()
         outimg = myrob.write_on_image(outimg)
         myrob.dim_kp = myrob.square_dimention(n_kp)
-        print(n_kp, " ", myrob.dim_kp)
+
 
 
     if cv2.waitKey(25) & 0xFF == ord('q'):
@@ -340,8 +333,35 @@ while capL.isOpened() and capR.isOpened():
 capL.release()
 capR.release()
 cv2.destroyAllWindows()
-plt.plot(range(1, myrob.count1), myrob.tot_dist[1:])
-plt.plot(range(1, myrob.count1), myrob.tot_dist_bg[1:])
-plt.plot(range(1, myfilter.n_frame),myfilter.tot_dist_bg_filt[1:])
-plt.plot(range(1, myfilter.n_frame),myfilter.tot_dist_filt[1:])
+
+# plt.figure()
+# plt.plot(range(1, myrob.count1), myrob.tot_dist_bg[1:],'g-')
+# plt.plot(range(1, myrob.count1), myrob.tot_dist[1:],'r-')
+# plt.gca().legend(('background distance','object distance'))
+# plt.title('Calculated distance')
+# plt.xlabel("Frame")
+# plt.ylabel("Distance")
+# plt.grid()
+# plt.show()
+# #
+# plt.figure()
+# plt.plot(range(1, myfilter.n_frame), myfilter.tot_dist_bg_filt[1:])
+# plt.plot(range(1, myfilter.n_frame), myfilter.tot_dist_filt[1:])
+# plt.gca().legend(('background distance','object distance'))
+# plt.title('Filtered distance')
+# plt.xlabel("Frame")
+# plt.ylabel("Distance")
+# plt.grid()
+# plt.show()
+
+plt.figure()
+plt.plot(range(1, myfilter.n_frame), myfilter.tot_dist_bg_filt[1:], range(1, myfilter.n_frame), myfilter.tot_dist_filt[1:], range(1, myrob.count1), myrob.tot_dist_bg[1:], range(1, myrob.count1), myrob.tot_dist[1:])
+plt.plot()
+plt.plot()
+plt.plot()
+plt.gca().legend(('filtered background distance', 'filtered object distance', 'calculated background distance', 'calculated object distance'))
+plt.title('Calculated vs filtered distance')
+plt.xlabel("Frame")
+plt.ylabel("Distance")
+plt.grid()
 plt.show()
