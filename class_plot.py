@@ -66,6 +66,11 @@ class Robot:
         self.count_b = 0
         self.count1 = 0
         self.dist_vect = np.ones((5,), dtype='int') * self.dim_kp
+        self.total_error_l = []
+        self.total_error_h = []
+        self.counter = 0
+        self.total_l = []
+        self.total_h = []
 
     def video_reading(self):
         capL = cv2.VideoCapture('robotL.avi')
@@ -143,6 +148,11 @@ class Robot:
                 est_W = 'Estimate W: ' + str(round(l_chess_mm, 2)) + 'mm'
                 est_H = 'Estimate H: ' + str(round(h_chess_mm, 2)) + 'mm'
                 err = 'Error %: W ' + str(round(100*(l_chess_mm - 125) / 125, 2)) + '% | H ' + str(round(100*(h_chess_mm - 178) / 178, 2)) + '%'
+                self.total_error_l.append(round(100*(l_chess_mm-125)/125, 2))
+                self.total_error_h.append(round(100*(h_chess_mm-178)/178, 2))
+                self.total_l.append(round(l_chess_mm, 2))
+                self.total_h.append(round(h_chess_mm, 2))
+                self.counter += 1
                 cv2.putText(outimg, err, (650, 50), cv2.FONT_ITALIC, 1, (0, 255, 255))
                 cv2.putText(outimg, est_W, (650, 75), cv2.FONT_ITALIC, 1, (0, 255, 255))
                 cv2.putText(outimg, est_H, (650, 100), cv2.FONT_ITALIC, 1, (0, 255, 255))
@@ -334,34 +344,72 @@ capL.release()
 capR.release()
 cv2.destroyAllWindows()
 
-# plt.figure()
-# plt.plot(range(1, myrob.count1), myrob.tot_dist_bg[1:],'g-')
-# plt.plot(range(1, myrob.count1), myrob.tot_dist[1:],'r-')
-# plt.gca().legend(('background distance','object distance'))
-# plt.title('Calculated distance')
-# plt.xlabel("Frame")
-# plt.ylabel("Distance")
-# plt.grid()
-# plt.show()
-# #
-# plt.figure()
-# plt.plot(range(1, myfilter.n_frame), myfilter.tot_dist_bg_filt[1:])
-# plt.plot(range(1, myfilter.n_frame), myfilter.tot_dist_filt[1:])
-# plt.gca().legend(('background distance','object distance'))
-# plt.title('Filtered distance')
-# plt.xlabel("Frame")
-# plt.ylabel("Distance")
-# plt.grid()
-# plt.show()
+plt.figure()
+plt.plot(range(1, myrob.count1), myrob.tot_dist_bg[1:],'g-')
+plt.plot(range(1, myrob.count1), myrob.tot_dist[1:],'r-')
+plt.gca().legend(('background distance','object distance'))
+plt.title('Calculated distance')
+plt.xlabel("Frame")
+plt.ylabel("Distance")
+plt.grid()
+plt.show()
+#
+plt.figure()
+plt.plot(range(1, myfilter.n_frame), myfilter.tot_dist_bg_filt[1:])
+plt.plot(range(1, myfilter.n_frame), myfilter.tot_dist_filt[1:])
+plt.gca().legend(('background distance','object distance'))
+plt.title('Filtered distance')
+plt.xlabel("Frame")
+plt.ylabel("Distance")
+plt.grid()
+plt.show()
 
 plt.figure()
 plt.plot(range(1, myfilter.n_frame), myfilter.tot_dist_bg_filt[1:], range(1, myfilter.n_frame), myfilter.tot_dist_filt[1:], range(1, myrob.count1), myrob.tot_dist_bg[1:], range(1, myrob.count1), myrob.tot_dist[1:])
-plt.plot()
-plt.plot()
-plt.plot()
 plt.gca().legend(('filtered background distance', 'filtered object distance', 'calculated background distance', 'calculated object distance'))
 plt.title('Calculated vs filtered distance')
 plt.xlabel("Frame")
 plt.ylabel("Distance")
+plt.grid()
+plt.show()
+
+plt.figure()
+plt.plot(range(myrob.counter), myrob.total_error_l)
+plt.plot(range(myrob.counter), myrob.total_error_h)
+plt.gca().legend(('lenght error','height error'))
+plt.title('Estimation error')
+plt.xlabel("Frame")
+plt.ylabel("% Error")
+plt.grid()
+plt.show()
+
+
+t = range(myrob.counter)
+data1 = myrob.total_l
+data2 = myrob.total_h
+data3 = myrob.total_error_l
+data4 = myrob.total_error_h
+
+fig, ax1 = plt.subplots()
+
+color = 'tab:red'
+ax1.set_xlabel('Frame')
+ax1.set_ylabel('dimentions', color=color)
+ax1.plot(t, data2, 'o-',color =color)
+ax1.plot(t, data1, 'v-',color = color)
+
+plt.gca().legend(('chessboard_height', 'chessboard_lenght'))
+ax1.tick_params(axis='y', labelcolor=color)
+
+ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+
+color = 'tab:blue'
+ax2.set_ylabel('% Error', color=color)  # we already handled the x-label with ax1
+ax2.plot(t, data4, 'o-',color = color)
+ax2.plot(t, data3, 'v-', color= color)
+plt.gca().legend(('height_error', 'lenght_error'))
+ax2.tick_params(axis='y', labelcolor=color)
+
+fig.tight_layout()  # otherwise the right y-label is slightly clipped
 plt.grid()
 plt.show()
