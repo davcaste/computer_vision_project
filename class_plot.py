@@ -21,10 +21,10 @@ class Myfilter:
         # Coefficients of the FIR filter
         self.FIR_coeff = FIR
         self.WS = len(self.FIR_coeff)
-        self.x = list(3 * np.ones(self.WS))
-        self.y = list(3 * np.ones(self.WS))
-        self.x_bg = list(3 * np.ones(self.WS))
-        self.y_bg = list(3 * np.ones(self.WS))
+        self.x = list(2.6 * np.ones(self.WS))
+        self.y = list(2.6 * np.ones(self.WS))
+        self.x_bg = list(2.6 * np.ones(self.WS))
+        self.y_bg = list(2.6 * np.ones(self.WS))
 
         self.tot_dist_filt = []
         self.tot_dist_bg_filt = []
@@ -136,12 +136,16 @@ class Robot:
     def estimation_chessboard(self, frameL, dist_ob, outimg):
         found, corners = cv2.findChessboardCorners(frameL, (6, 8))
         cv2.drawChessboardCorners(outimg, (6, 8), corners, found)
+
         if found:
+            pt1 = corners[0]
+            pt2 = corners[5]
+            pt4 = corners[-1]
             pt = (corners[0], corners[-1])
             cv2.circle(frameL, (pt[0][0][0], pt[0][0][1]), 8, (0, 255, 0), 1)
             cv2.circle(frameL, (pt[1][0][0], pt[1][0][1]), 8, (0, 255, 0), 1)
-            l_chess = pt[1][0][0] - pt[0][0][0]
-            h_chess = pt[1][0][1] - pt[0][0][1]
+            l_chess = pt2[0][0] - pt1[0][0]
+            h_chess = pt4[0][1] - pt2[0][1]
             l_chess_mm = ((dist_ob * l_chess) / self.focal_lenght) * 1000
             h_chess_mm = ((dist_ob * h_chess) / self.focal_lenght) * 1000
             if l_chess_mm > 0 and h_chess_mm > 0:
@@ -214,12 +218,14 @@ class Robot:
             disparity_map_star = disparity_map[disparity_map_star.mask]
             std_dev = np.std(disparity_map_star)
 
-            if std_dev > 0:  # (2 / dist_ob):
+            if std_dev > 0.5 / self.dist_ob:
                 val = filters.threshold_otsu(disparity_map_star)
                 self.d_main_background = np.mean(disparity_map_star[disparity_map_star <= val])
                 self.dist_bg = round(0.001 * self.focal_lenght * self.baseline / self.d_main_background, 2)
                 self.d_main_object = np.mean(disparity_map_star[disparity_map_star > val])
                 self.dist_ob = round(0.001 * self.focal_lenght * self.baseline / self.d_main_object, 2)
+                self.dist_ob -= self.dist_ob * 0.065
+                self.dist_bg -= self.dist_bg * 0.065
                 if self.dist_bg - self.dist_ob < 0.1:
                     self.dist_bg = self.filtered_dist_bkg[0]
 
@@ -256,7 +262,7 @@ class Robot:
                 self.count1 += 1
         else:
             self.count1 += 1
-            self.tot_dist.append(self.filtered_dist_obj[0])
+            self.tot_dist.append(self.dist_ob)
             self.tot_dist_bg.append(self.filtered_dist_bkg[0])
 
     def write_on_image(self, outimg):
@@ -294,7 +300,7 @@ class Robot:
 
 myrob = Robot(567.2, 92.226, 2)
 coeff = [-0.00545737100067199, 0.0317209689414059, 0.254972364809816, 0.437528074498901, 0.254972364809816, 0.0317209689414059, -0.00545737100067199]
-myfilter = Myfilter(15, 0.5, 2.7, 6, coeff)
+myfilter = Myfilter(15, 0.5, 2.6, 6, coeff)
 capL, capR = myrob.video_reading()
 while capL.isOpened() and capR.isOpened():
 
@@ -374,15 +380,19 @@ plt.grid()
 plt.show()
 
 plt.figure()
-plt.plot(range(myrob.counter), myrob.total_error_l)
+plt.plot(range(myrob.counter), myrob.total_error_l, '-y')
 plt.plot(range(myrob.counter), myrob.total_error_h)
+plt.plot(range(myrob.counter), (np.mean(myrob.total_error_l),)*myrob.counter, '-y')
+plt.plot(range(myrob.counter), (np.mean(myrob.total_error_h),)*myrob.counter, '-b')
+
 plt.gca().legend(('lenght error','height error'))
 plt.title('Estimation error')
 plt.xlabel("Frame")
 plt.ylabel("% Error")
 plt.grid()
 plt.show()
-
+print('mean height error', np.mean(myrob.total_error_h))
+print('mean lenght error', np.mean(myrob.total_error_l))
 
 t = range(myrob.counter)
 data1 = myrob.total_l
